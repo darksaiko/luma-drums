@@ -204,7 +204,7 @@
     <div class="fields">
       <div class="field full"><label>Sound output</label>
         <div class="seg" id="segOut"><button data-v="int">Built-in</button><button data-v="midi">MIDI out</button><button data-v="both">Both</button></div>
-        <small>MIDI out sends notes to a Drum Rack in Ableton</small></div>
+        <small>MIDI out sends notes to a Drum Rack in Ableton · on iPhone, turn off silent mode</small></div>
       <div class="field full" id="midiBox"><label>MIDI output</label>
         <select id="selOut"><option value="">— none —</option></select>
         <div class="row" style="margin-top:4px"><button class="btn primary" id="btnConnect">Connect / refresh</button><button class="btn" id="btnTest">Send test hit</button></div>
@@ -231,7 +231,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VERSION = 'v1';   // bump on every release (and VERSION in sw.js)
+  const APP_VERSION = 'v2';   // bump on every release (and VERSION in sw.js)
 
   // ================= voices =================
   const VOICES = [
@@ -400,8 +400,21 @@
       S.params.forEach((a, i) => { const p = eng.P[i]; p.pitch = a[0]; p.decay = a[1]; p.tone = a[2]; p.drive = a[3]; p.level = a[4]; eng.applyParams(i); });
       eng.master.gain.value = S.master / 100 * 1.0;
     }
-    if (ctx.state === 'suspended') ctx.resume();
+    unlock();
   }
+  // iOS (every browser on iPhone uses WebKit) only starts audio from a touchend/click, not from pointerdown,
+  // and mutes Web Audio while the silent switch is on unless the audio session is set to "playback".
+  function unlock() {
+    if (!ctx) return;
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (_) {}
+    if (ctx.state !== 'running') { try { ctx.resume(); } catch (_) {} }
+    try { const b = ctx.createBuffer(1, 1, 22050), s = ctx.createBufferSource(); s.buffer = b; s.connect(ctx.destination); s.start(0); } catch (_) {}
+  }
+  ['touchend', 'pointerup', 'click', 'keydown'].forEach(ev => document.addEventListener(ev, () => {
+    if (!wantAudio()) return;
+    initAudio();
+    if (ctx && ctx.state !== 'running') setTimeout(() => { if (ctx.state !== 'running') toast('Sound is locked · tap a pad once more'); }, 400);
+  }, { passive: true }));
   const wantAudio = () => S.outMode !== 'midi';
   const wantMidi = () => S.outMode !== 'int';
 
@@ -655,7 +668,6 @@
   }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) wake(); else save(); });
   // unlock audio on first touch anywhere
-  document.addEventListener('pointerdown', () => { if (wantAudio()) initAudio(); }, { once: true });
 
   // ================= boot =================
   $('appVer').textContent = '· ' + APP_VERSION;
