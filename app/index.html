@@ -216,6 +216,9 @@
       <div class="field"><label>Pad velocity</label>
         <div class="seg" id="segVel"><button data-v="pos">By position</button><button data-v="fix">Fixed</button></div>
         <small>position: higher on the pad = louder</small></div>
+      <div class="field"><label>Accents</label>
+        <div class="seg" id="segAcc"><button data-v="1">On</button><button data-v="0">Off</button></div>
+        <small>on: tap a step twice for a loud accent · off: steps are just on / off (fast editing)</small></div>
       <div class="field"><label>Master volume <em id="vMaster"></em></label><input type="range" id="rngMaster" min="0" max="100"></div>
       <div class="field"><label>Haptics</label>
         <div class="seg" id="segHap"><button data-v="1">On</button><button data-v="0">Off</button></div></div>
@@ -231,7 +234,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VERSION = 'v3';   // bump on every release (and VERSION in sw.js)
+  const APP_VERSION = 'v4';   // bump on every release (and VERSION in sw.js)
 
   // ================= voices =================
   const VOICES = [
@@ -260,7 +263,7 @@
   function makeEngine(ctx, dest) {
     const master = ctx.createGain(); master.gain.value = 0.8;
     const comp = ctx.createDynamicsCompressor();
-    comp.threshold.value = -10; comp.knee.value = 8; comp.ratio.value = 5; comp.attack.value = 0.004; comp.release.value = 0.12;
+    comp.threshold.value = -4; comp.knee.value = 6; comp.ratio.value = 3.5; comp.attack.value = 0.004; comp.release.value = 0.12;
     master.connect(comp); comp.connect(dest);
     const nbuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate), nd = nbuf.getChannelData(0);
     for (let i = 0; i < nd.length; i++) nd[i] = Math.random() * 2 - 1;
@@ -350,7 +353,12 @@
     };
 
     function trigger(i, t, vel) {
-      const p = P[i], out = bus[i].sh, v = Math.max(0.05, Math.min(1, vel));
+      // velocity is applied AFTER the drive shaper (per hit), otherwise saturation flattens soft and hard hits to the same level
+      const p = P[i], g0 = Math.max(0.03, Math.pow(Math.max(0, Math.min(1, vel)), 1.6)), vg = ctx.createGain();
+      vg.gain.value = g0; vg.connect(bus[i].g);
+      let out = vg;
+      if (bus[i].sh.curve) { const sh = ctx.createWaveShaper(); sh.oversample = '2x'; sh.curve = bus[i].sh.curve; sh.connect(vg); out = sh; }
+      const v = 1;
       switch (VOICES[i].id) {
         case 'kick': synth.kick(t, v, p, out); break;
         case 'snare': synth.snare(t, v, p, out); break;
@@ -376,7 +384,7 @@
     [0, 3, 10].forEach(s => B[0][s] = 2); B[0][6] = 1; B[1][4] = 2; B[1][12] = 2; B[1][15] = 1; for (let s = 0; s < 16; s += 2) B[3][s] = 1; B[2][12] = 1;
     return [A, B, C, D];
   };
-  const DEF = { kit: '808', params: KITS['808'].map(a => a.slice()), pats: DEFPAT(), mute: Array(NV).fill(0), bpm: 120, swing: 0, outMode: 'int', ch: 10, map: 'chrom', vel: 'pos', master: 80, haptics: 1, wake: 1, outId: '', pat: 0 };
+  const DEF = { kit: '808', params: KITS['808'].map(a => a.slice()), pats: DEFPAT(), mute: Array(NV).fill(0), bpm: 120, swing: 0, outMode: 'int', ch: 10, map: 'gm', acc: 0, vel: 'pos', master: 80, haptics: 1, wake: 1, outId: '', pat: 0 };
   const KEY = 'lumadrums.v1';
   let S = JSON.parse(JSON.stringify(DEF));
   try { const raw = localStorage.getItem(KEY); if (raw) Object.assign(S, JSON.parse(raw)); } catch (_) {}
@@ -389,7 +397,11 @@
       if (Array.isArray(S.pats)) S.pats = S.pats.map(mv);
     }
   } catch (_) {}
-  S.layout = 2;
+  try {
+    const raw1 = localStorage.getItem(KEY);
+    if (raw1 && !(JSON.parse(raw1).layout >= 3)) S.map = 'gm';   // v4: GM drum notes are the default
+  } catch (_) {}
+  S.layout = 3; S.acc = S.acc === 1 ? 1 : 0;
   // sanitize
   S.params = Array.from({ length: NV }, (_, i) => Array.from({ length: 5 }, (_, k) => { const v = S.params && S.params[i] && +S.params[i][k]; return isFinite(v) ? Math.min(1, Math.max(0, v)) : DEF.params[i][k]; }));
   S.pats = Array.from({ length: NPAT }, (_, p) => Array.from({ length: NV }, (_, i) => Array.from({ length: NS }, (_, s) => { const v = S.pats && S.pats[p] && S.pats[p][i] && S.pats[p][i][s]; return v === 1 || v === 2 ? v : 0; })));
@@ -536,10 +548,10 @@
     sgrid.appendChild(tr);
   });
   const stepVal = (i, s) => S.pats[S.pat][i][s];
+  const stepVel = v => (v === 2 && S.acc === 1) ? 1 : (S.acc === 1 ? 0.72 : 0.85);   // accents off: every step plays the same
   function paintCell(i, s) {
     const v = stepVal(i, s), c = cells[i][s];
-    c.classList.toggle('on', v === 1); c.classList.toggle('acc', v === 2);
-    if (v === 1) c.classList.add('on'); if (v === 2) c.classList.add('on');   // accent keeps base on-state
+    c.classList.toggle('on', v > 0); c.classList.toggle('acc', v === 2 && S.acc === 1);
   }
   function renderSeq() { for (let i = 0; i < NV; i++) for (let s = 0; s < NS; s++) paintCell(i, s); }
   let paint = null;
@@ -547,12 +559,12 @@
     const i = +c.dataset.i, s = +c.dataset.s;
     if (S.pats[S.pat][i][s] === val) return;
     S.pats[S.pat][i][s] = val; paintCell(i, s); saveSoon();
-    if (val > 0 && !playing) hit(i, val === 2 ? 1 : 0.72);
+    if (val > 0 && !playing) hit(i, stepVel(val));
   }
   sgrid.addEventListener('pointerdown', e => {
     const c = e.target.closest('.stp'); if (!c) return;
     e.preventDefault(); try { sgrid.setPointerCapture(e.pointerId); } catch (_) {}
-    const cur = S.pats[S.pat][+c.dataset.i][+c.dataset.s], next = (cur + 1) % 3;
+    const cur = S.pats[S.pat][+c.dataset.i][+c.dataset.s], next = S.acc === 1 ? (cur + 1) % 3 : (cur ? 0 : 1);
     paint = { val: next }; applyStep(c, next);
   });
   sgrid.addEventListener('pointermove', e => {
@@ -591,7 +603,7 @@
     const sw = (s % 2 === 1) ? S.swing / 100 * stepDur() * 0.5 : 0, tt = t + sw, pat = S.pats[S.pat];
     for (let i = 0; i < NV; i++) {
       const v = pat[i][s]; if (!v || S.mute[i]) continue;
-      hit(i, v === 2 ? 1 : 0.72, tt);
+      hit(i, stepVel(v), tt);
     }
     vq.push({ s, t: tt });
   }
@@ -649,13 +661,13 @@
   const seg = (id, key, fn) => document.querySelectorAll('#' + id + ' button').forEach(b => b.addEventListener('click', () => { const raw = b.dataset.v; S[key] = isNaN(+raw) ? raw : +raw; save(); syncUI(); fn && fn(); }));
   function syncUI() {
     selCh.value = S.ch;
-    [['segOut', 'outMode'], ['segMap', 'map'], ['segVel', 'vel'], ['segHap', 'haptics'], ['segWake', 'wake']].forEach(([id, k]) =>
+    [['segOut', 'outMode'], ['segMap', 'map'], ['segVel', 'vel'], ['segHap', 'haptics'], ['segWake', 'wake'], ['segAcc', 'acc']].forEach(([id, k]) =>
       document.querySelectorAll('#' + id + ' button').forEach(b => b.classList.toggle('on', String(S[k]) === b.dataset.v)));
     $('rngMaster').value = S.master; $('vMaster').textContent = S.master + '%';
     $('midiBox').style.display = S.outMode === 'int' ? 'none' : '';
     setMidiStat();
   }
-  seg('segOut', 'outMode', () => { if (S.outMode !== 'int' && !access) connectMIDI(); }); seg('segMap', 'map'); seg('segVel', 'vel'); seg('segHap', 'haptics'); seg('segWake', 'wake', wake);
+  seg('segOut', 'outMode', () => { if (S.outMode !== 'int' && !access) connectMIDI(); }); seg('segMap', 'map'); seg('segVel', 'vel'); seg('segAcc', 'acc', renderSeq); seg('segHap', 'haptics'); seg('segWake', 'wake', wake);
   selCh.addEventListener('change', () => { S.ch = +selCh.value; save(); });
   $('rngMaster').addEventListener('input', e => { S.master = +e.target.value; $('vMaster').textContent = S.master + '%'; if (eng) eng.master.gain.value = S.master / 100; saveSoon(); });
   $('selOut').addEventListener('change', e => { out = access ? access.outputs.get(e.target.value) || null : null; S.outId = out ? out.id : ''; save(); midiState = out ? 'connected' : 'noports'; setMidiStat(); });
