@@ -4,7 +4,7 @@
 # when there is one, copies everything in the repo's app/ folder into the live folder.
 # Paths can be overridden with environment variables (used for testing).
 
-REPO="${REPO:-/home/alpacaqr/repositories/drums}"
+REPO="${REPO:-/home/alpacaqr/repositories/luma-drums}"
 LIVE="${LIVE:-/home/alpacaqr/public_html/drums}"
 LOG="${LOG:-/home/alpacaqr/deploy-drums.log}"
 LOCK="${LOCK:-/home/alpacaqr/.deploy-drums.lock}"
