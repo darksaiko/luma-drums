@@ -231,7 +231,7 @@
 <script>
 (() => {
   const $ = id => document.getElementById(id);
-  const APP_VERSION = 'v2';   // bump on every release (and VERSION in sw.js)
+  const APP_VERSION = 'v3';   // bump on every release (and VERSION in sw.js)
 
   // ================= voices =================
   const VOICES = [
@@ -240,19 +240,19 @@
     { id: 'clap',  name: 'Clap',   col: '141,255,106', tone: 'Tone',  gm: 39 },
     { id: 'chh',   name: 'Hat',    col: '255,193,90',  tone: 'Bright', gm: 42 },
     { id: 'ohh',   name: 'Open',   col: '255,107,127', tone: 'Bright', gm: 46 },
+    { id: 'crash', name: 'Crash',  col: '255,226,140', tone: 'Bright', gm: 49 },
     { id: 'tlo',   name: 'Tom Lo', col: '176,115,255', tone: 'Bend',  gm: 45 },
-    { id: 'thi',   name: 'Tom Hi', col: '255,138,208', tone: 'Bend',  gm: 50 },
-    { id: 'perc',  name: 'Perc',   col: '246,217,168', tone: 'Tone',  gm: 56 }
+    { id: 'thi',   name: 'Tom Hi', col: '255,138,208', tone: 'Bend',  gm: 50 }
   ];
   const NV = VOICES.length, NS = 16, NPAT = 4;
   // params: [pitch, decay, tone, drive, level] per voice, 0..1
   const KITS = {
-    '808':     [[.5,.55,.45,.15,.9],[.5,.4,.5,.1,.8],[.5,.45,.5,0,.75],[.5,.3,.5,0,.6],[.5,.45,.5,0,.6],[.5,.5,.5,0,.8],[.5,.45,.5,0,.8],[.5,.4,.5,0,.65]],
-    '909':     [[.55,.35,.7,.35,.9],[.55,.3,.7,.25,.8],[.55,.4,.6,.1,.75],[.55,.2,.7,0,.6],[.55,.35,.7,0,.6],[.55,.4,.6,.1,.8],[.6,.35,.6,.1,.8],[.55,.3,.6,0,.65]],
-    'Deep':    [[.32,.8,.3,.2,.9],[.4,.6,.35,.15,.8],[.4,.6,.35,0,.75],[.45,.25,.35,0,.55],[.45,.55,.35,0,.55],[.35,.7,.4,0,.8],[.4,.6,.4,0,.8],[.4,.5,.35,0,.65]],
-    'Tight':   [[.5,.2,.6,.3,.9],[.55,.18,.65,.2,.8],[.5,.2,.6,.1,.75],[.55,.1,.65,0,.6],[.55,.2,.65,0,.6],[.5,.2,.5,0,.8],[.55,.2,.5,0,.8],[.55,.2,.6,0,.65]],
-    'Lo-fi':   [[.4,.5,.4,.75,.85],[.4,.45,.45,.8,.75],[.4,.5,.4,.7,.7],[.4,.3,.4,.6,.55],[.4,.4,.4,.6,.55],[.4,.5,.4,.7,.75],[.4,.5,.4,.7,.75],[.4,.4,.4,.65,.6]],
-    'Neon':    [[.55,.45,.6,.3,.9],[.5,.55,.4,.2,.8],[.5,.65,.6,.15,.8],[.55,.25,.6,0,.6],[.55,.55,.6,0,.6],[.6,.55,.65,.1,.8],[.65,.5,.65,.1,.8],[.6,.5,.55,0,.65]]
+    '808':     [[.5,.55,.45,.15,.9],[.5,.4,.5,.1,.8],[.5,.45,.5,0,.75],[.5,.3,.5,0,.6],[.5,.45,.5,0,.6],[.5,.6,.5,0,.7],[.5,.5,.5,0,.8],[.5,.45,.5,0,.8]],
+    '909':     [[.55,.35,.7,.35,.9],[.55,.3,.7,.25,.8],[.55,.4,.6,.1,.75],[.55,.2,.7,0,.6],[.55,.35,.7,0,.6],[.55,.55,.6,0,.7],[.55,.4,.6,.1,.8],[.6,.35,.6,.1,.8]],
+    'Deep':    [[.32,.8,.3,.2,.9],[.4,.6,.35,.15,.8],[.4,.6,.35,0,.75],[.45,.25,.35,0,.55],[.45,.55,.35,0,.55],[.4,.7,.35,0,.65],[.35,.7,.4,0,.8],[.4,.6,.4,0,.8]],
+    'Tight':   [[.5,.2,.6,.3,.9],[.55,.18,.65,.2,.8],[.5,.2,.6,.1,.75],[.55,.1,.65,0,.6],[.55,.2,.65,0,.6],[.55,.35,.6,0,.7],[.5,.2,.5,0,.8],[.55,.2,.5,0,.8]],
+    'Lo-fi':   [[.4,.5,.4,.75,.85],[.4,.45,.45,.8,.75],[.4,.5,.4,.7,.7],[.4,.3,.4,.6,.55],[.4,.4,.4,.6,.55],[.4,.55,.4,.6,.65],[.4,.5,.4,.7,.75],[.4,.5,.4,.7,.75]],
+    'Neon':    [[.55,.45,.6,.3,.9],[.5,.55,.4,.2,.8],[.5,.65,.6,.15,.8],[.55,.25,.6,0,.6],[.55,.55,.6,0,.6],[.6,.7,.65,.1,.7],[.6,.55,.65,.1,.8],[.65,.5,.65,.1,.8]]
   };
   const KIT_NAMES = Object.keys(KITS);
 
@@ -275,7 +275,7 @@
       for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; c[i] = (1 + k) * x / (1 + k * Math.abs(x)); }
       return c;
     };
-    const TRIM = [1, 1, 1.7, 6, 4, 1, 1, 2.4];   // loudness balance between voices
+    const TRIM = [1, 1, 1.7, 6, 4, 1.3, 1, 1];   // loudness balance between voices
     function applyParams(i) {
       const p = P[i];
       bus[i].sh.curve = p.drive > 0.01 ? curve(p.drive) : null;
@@ -336,13 +336,16 @@
         const o2 = ctx.createOscillator(), g2 = ctx.createGain(); o2.type = 'triangle'; o2.frequency.setValueAtTime(f * 1.5, t); o2.frequency.exponentialRampToValueAtTime(f * 1.02, t + 0.06);
         env(g2, t, v * 0.25, dur * 0.4); o2.connect(g2); g2.connect(out); o2.start(t); o2.stop(t + dur);
       },
-      perc(t, v, p, out) {
-        const pf = Math.pow(2, (p.pitch - 0.5) * 1.6), dur = 0.07 + p.decay * 0.45;
-        const bp = filt('bandpass', (700 + p.tone * 900) * pf, 2.2), g = ctx.createGain();
-        [540, 800].forEach(f => { const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f * pf; const og = ctx.createGain(); og.gain.value = 0.5; o.connect(og); og.connect(bp); o.start(t); o.stop(t + dur + 0.05); });
-        bp.connect(g); g.connect(out);
-        g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + 0.001);
-        g.gain.exponentialRampToValueAtTime(v * 0.3, t + 0.03); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      crash(t, v, p, out) {
+        const pf = Math.pow(2, (p.pitch - 0.5) * 1.2), dur = 0.5 + p.decay * 2.2;
+        const n = noise(t, dur + 0.1), hp = filt('highpass', 2500 + p.tone * 4500, 0.7), ng = ctx.createGain();
+        env(ng, t, v * 0.6, dur, 0.001); n.connect(hp); hp.connect(ng); ng.connect(out);
+        const bp = filt('bandpass', 7000 + p.tone * 3000, 0.45), mg = ctx.createGain();
+        [205.3, 304.4, 369.6, 522.7, 540, 800, 1150].forEach(f => {
+          const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f * pf * 2.7; const og = ctx.createGain(); og.gain.value = 0.12;
+          o.connect(og); og.connect(bp); o.start(t); o.stop(t + dur * 0.7 + 0.05);
+        });
+        bp.connect(mg); mg.connect(out); env(mg, t, v * 0.7, dur * 0.7, 0.001);
       }
     };
 
@@ -358,7 +361,7 @@
         case 'ohh': openHat = synth.hat(t, v, p, out, true); break;
         case 'tlo': synth.tom(t, v, p, out, 110); break;
         case 'thi': synth.tom(t, v, p, out, 200); break;
-        case 'perc': synth.perc(t, v, p, out); break;
+        case 'crash': synth.crash(t, v, p, out); break;
       }
     }
     return { P, trigger, applyParams, master };
@@ -377,6 +380,16 @@
   const KEY = 'lumadrums.v1';
   let S = JSON.parse(JSON.stringify(DEF));
   try { const raw = localStorage.getItem(KEY); if (raw) Object.assign(S, JSON.parse(raw)); } catch (_) {}
+  // layout 2: Perc was replaced by Crash (now voice 6) and the toms moved down one slot
+  try {
+    const raw0 = localStorage.getItem(KEY);
+    if (raw0 && !(JSON.parse(raw0).layout >= 2)) {
+      const mv = a => Array.isArray(a) ? [a[0], a[1], a[2], a[3], a[4], undefined, a[5], a[6]] : a;
+      S.params = mv(S.params); S.mute = mv(S.mute);
+      if (Array.isArray(S.pats)) S.pats = S.pats.map(mv);
+    }
+  } catch (_) {}
+  S.layout = 2;
   // sanitize
   S.params = Array.from({ length: NV }, (_, i) => Array.from({ length: 5 }, (_, k) => { const v = S.params && S.params[i] && +S.params[i][k]; return isFinite(v) ? Math.min(1, Math.max(0, v)) : DEF.params[i][k]; }));
   S.pats = Array.from({ length: NPAT }, (_, p) => Array.from({ length: NV }, (_, i) => Array.from({ length: NS }, (_, s) => { const v = S.pats && S.pats[p] && S.pats[p][i] && S.pats[p][i][s]; return v === 1 || v === 2 ? v : 0; })));
